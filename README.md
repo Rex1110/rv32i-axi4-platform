@@ -1,6 +1,4 @@
-# CPU with AXI4
-
-## **1. Specification**
+# **1. Specification**
 
 
 | Component              | Role     |  Memory mapped             |
@@ -24,19 +22,19 @@
 ![13](https://github.com/Rex1110/CPU-AXI4/assets/123956376/51237751-3f4f-418a-bab5-ac25ccc9eb3d)
 
 
-## **2. Schematic**
+# **2. Schematic**
 
 ![1](https://github.com/Rex1110/CPU-AXI4/assets/123956376/7521f20f-1509-4d81-a5cc-e3261d1eebf6)
 
 
-### Shared Address Shared Data architecture
+## Shared Address Shared Data architecture
 
 ![2](https://github.com/Rex1110/CPU-AXI4/assets/123956376/57ccca98-f4e8-49ad-a30f-4e61d0e5157b)
 
 
-## **3. State machine**
+# **3. State machine**
 
-### **1. Master 0 (IF stage)**
+## **1. Master 0 (IF stage)**
 Master 0 為 IF stage，只需要與 Instruction memory 讀溝通，如果今天 CPU 中無 Load、Store 指令在管線中，則不斷地抓取指令，之所以這樣設計是因為 IF stage 讀取進來後位於 MEM stage 的指令正在使用 AXI bus 這樣管線就需要暫停，因此為了方便直接判斷管線中是否有 Load、 Store 指令，有的話暫停等到 Load、Store 使用完 AXI bus 再繼續讀取。
 
 
@@ -44,13 +42,13 @@ Master 0 為 IF stage，只需要與 Instruction memory 讀溝通，如果今天
 
 
 
-### **2. Master 1 (MEM stage)**
+## **2. Master 1 (MEM stage)**
 Master 1 為 Mem stage，測資"讀"範圍 Instruction memory、 Data memory，以及"寫"範圍 Data memory，AXI bus 使用上若要寫入則為 Store 指令，因此判斷 DM_WEB 是否需寫入，若要讀取則判斷是否 DM_OE，雖然訊號線為 DM(Data memory) 但事實上讀取範圍可能跨到 Instruction memory 位置。
 
 ![4](https://github.com/Rex1110/CPU-AXI4/assets/123956376/7239921a-95d3-492a-9f77-2537461a8a08)
 
 
-### **3. Slave 0, 1(SRAM)**
+## **3. Slave 0, 1(SRAM)**
 | Component              | Role     |  Memory mapped             |
 | --------               | -------- |  --------                  |
 | **Instruction memory** | Slave  0 |  0x0000_0000 - 0x0000_ffff |
@@ -59,7 +57,7 @@ Master 1 為 Mem stage，測資"讀"範圍 Instruction memory、 Data memory，�
 ![5](https://github.com/Rex1110/CPU-AXI4/assets/123956376/f873a184-2e80-4062-80e5-d8ba1912c989)
 
 
-### **4. AXI Read Arbiter**
+## **4. AXI Read Arbiter**
 AXI interconnect 中的讀通道仲裁器。
 
 根據測資， \
@@ -79,7 +77,7 @@ M1 讀取範圍不只 S1 會跨到 S0。
 
 
 
-### **5. AXI Write Arbiter**
+## **5. AXI Write Arbiter**
 AXI interconnect 中的寫通道仲裁器，只有 Master 0 會進行寫操作，並且只與 Slave 1 交流。
 
 - **1. IDLE state**\
