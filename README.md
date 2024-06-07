@@ -1,5 +1,14 @@
-# **1. Specification**
+### 2024/6/7 更新說明：SRAM Burst Length & Size 變更
+- **變更詳情**：
+  - **Burst Length Size**: 原版本 SRAM SLAVE 僅支援 AxLen=0, AxSize=0，更新後可支援 AxLen=0~16, AxSize=0, 1, 2。
+- **變更原因**：
+  - 在進行 UVM Slave 端 SRAM 驗證的時候想要加入更多 case 因此進行更改。
+- **影響**：
+  - 無影響，系統中的 CPU 只會送 AxLen=0, AxSize=0。
 
+系統上的額外驗證，[AXI4 protocol checker formal verification](https://github.com/Rex1110/Formal-verification/tree/master/AXI4)，[Slave SRAM UVM驗證](https://github.com/Rex1110/UVM/tree/master/AXI4-SRAM-slave)。
+
+# **1. Specification**
 
 | Component              | Role     |  Memory mapped             |
 | --------               | -------- |  --------                  |
