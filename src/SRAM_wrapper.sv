@@ -1,5 +1,5 @@
 `include "AXI_define.svh"
-
+`include "./SRAM.v"
 module SRAM_wrapper(
     input   ACLK,
     input   ARESETn,
@@ -38,14 +38,19 @@ module SRAM_wrapper(
     output  logic                           RVALID,
     input                                   RREADY
 );
-    logic [3 :0] WEB;
     logic [13:0] A;
-    logic [31:0] DI;
-    logic [31:0] DO;
+    logic [`AXI_STRB_BITS-1:0] WEB;
+    logic [`AXI_DATA_BITS-1:0] DI;
+    logic [`AXI_DATA_BITS-1:0] DO;
+
+    logic [`AXI_ADDR_BITS-1:0] ARADDR_reg;
+    logic [`AXI_ADDR_BITS-1:0] AWADDR_reg;
+    logic [`AXI_SIZE_BITS-1:0 ] arsizeReg;
 
     logic [2:0] state, next_state;
-    logic [3:0] read_burst_cnt;
-    logic [31:0] ARADDR_reg;
+    logic [1:0] awsize_cnt, arsize_cnt;
+    logic [3:0] read_burst_cnt, write_burst_cnt;
+
     localparam IDLE             = 3'd0;
     localparam READ_ADDRESS     = 3'd1;
     localparam READ_DATA        = 3'd2;
@@ -91,9 +96,40 @@ module SRAM_wrapper(
 
     assign ARREADY  = (state == READ_ADDRESS) ? 1'b1 : 1'b0;
 
-    assign RDATA    = (state == READ_DATA) ? DO : 32'd0;
+    
+    always_ff @(posedge ACLK, negedge ARESETn) begin
+        if (~ARESETn) begin
+            arsizeReg <= 'd0;
+        end else if (ARVALID && ARREADY) begin
+            arsizeReg <= ARSIZE;
+        end else begin
+            arsizeReg <= arsizeReg;
+        end
+    end
+    always_comb begin
+        if (arsizeReg == 'd0) begin
+            if (arsize_cnt == 'd3) begin
+                RDATA = DO[7:0];
+            end else if (arsize_cnt == 'd2) begin
+                RDATA = DO[15:8];
+            end else if (arsize_cnt == 'd1) begin
+                RDATA = DO[23:16];
+            end else begin
+                RDATA = DO[31:24];
+            end
+        end else if (arsizeReg == 'd1) begin
+            if (arsize_cnt == 'd2) begin
+                RDATA = DO[15:0];
+            end else begin
+                RDATA = DO[31:16];
+            end
+        end else begin
+            RDATA = DO;
+        end
+    end
     assign RRESP    = `AXI_RESP_OKAY;
     assign RLAST    = ((state == READ_DATA) && (read_burst_cnt == 0)) ? 1'b1 : 1'b0;
+
     assign RVALID   = (state == READ_DATA) ? 1'b1 : 1'b0;
 
     always_ff @(posedge ACLK, negedge ARESETn) begin
@@ -106,6 +142,7 @@ module SRAM_wrapper(
         end
     end
 
+    // ADDR reg
     always_ff @(posedge ACLK, negedge ARESETn) begin
         if (~ARESETn) begin
             read_burst_cnt  <= 4'd0;
@@ -116,18 +153,90 @@ module SRAM_wrapper(
                 ARADDR_reg      <= ARADDR;
             end else if (RVALID && RREADY) begin
                 read_burst_cnt  <= read_burst_cnt - 4'd1;
-                ARADDR_reg      <= ARADDR_reg + 32'd4;
+                if (arsize_cnt == 'd0) begin
+                    ARADDR_reg <= ARADDR_reg + 'd4;
+                end else begin
+                    ARADDR_reg <= ARADDR_reg;
+                end
+            end
+        end
+    end
+    always_ff @(posedge ACLK, negedge ARESETn) begin
+        if (~ARESETn) begin
+            write_burst_cnt <= 4'd0;
+            AWADDR_reg      <= 'd0;
+        end else begin
+            if (AWVALID && AWREADY) begin
+                write_burst_cnt <= AWLEN;
+                AWADDR_reg      <= AWADDR;
+            end else if (WVALID && WREADY) begin
+                write_burst_cnt <= write_burst_cnt - 'd1;
+                if (awsize_cnt == 'd0) begin
+                    AWADDR_reg <= AWADDR_reg + 'd4;
+                end else begin
+                    AWADDR_reg <= AWADDR_reg;
+                end
             end
         end
     end
 
+    // burst cnt
+    always_ff @(posedge ACLK, negedge ARESETn) begin
+        if (~ARESETn) begin
+            arsize_cnt <= 'd0;
+        end else begin
+            if (ARVALID && ARREADY) begin
+                if (ARSIZE == 'd0) begin
+                    arsize_cnt <= 'd3;
+                end else if (ARSIZE == 'd1) begin
+                    arsize_cnt <= 'd2;
+                end else begin
+                    arsize_cnt <= 'd0;
+                end
+            end else if (RVALID && RREADY) begin
+                if (ARSIZE == 'd0) begin
+                    arsize_cnt <= arsize_cnt - 'd1;
+                end else if (ARSIZE == 'd1) begin
+                    arsize_cnt <= arsize_cnt - 'd2;
+                end else begin
+                    arsize_cnt <= 'd0;
+                end
+            end
+        end
+    end
+
+    always_ff @(posedge ACLK, negedge ARESETn) begin
+        if (~ARESETn) begin
+            awsize_cnt <= 'd0;
+        end else begin
+            if (AWVALID && AWREADY) begin
+                if (AWSIZE == 'd0) begin
+                    awsize_cnt <= 'd3;
+                end else if (AWSIZE == 'd1) begin
+                    awsize_cnt <= 'd2;
+                end else begin
+                    awsize_cnt <= 'd0;
+                end
+            end else if (WVALID && WREADY) begin
+                if (AWSIZE == 'd0) begin
+                    awsize_cnt <= awsize_cnt - 'd1;
+                end else if (AWSIZE == 'd1) begin
+                    awsize_cnt <= awsize_cnt - 'd2;
+                end else begin
+                    awsize_cnt <= 'd0;
+                end
+            end
+        end
+    end
+    
+
     always_comb begin
         if (state == WRITE_DATA) begin
-            A = AWADDR[15:2];
+            A = AWADDR_reg[15:2];
         end else if (state == READ_ADDRESS) begin
             A = ARADDR[15:2];
         end else if (state == READ_DATA) begin
-            if (RVALID && RREADY) begin
+            if (RVALID && RREADY && (arsize_cnt == 'd0)) begin
                 A = ARADDR_reg[15:2] + 14'd1;
             end else begin
                 A = ARADDR_reg[15:2];
@@ -136,10 +245,48 @@ module SRAM_wrapper(
             A = 'd0;
         end
     end
-
-    assign WEB = (WVALID && WREADY) ? WSTRB : 4'b1111;
-    assign DI  = (WVALID && WREADY) ? WDATA : 32'd0;
-
+    
+    always_comb begin
+        if (WVALID && WREADY) begin
+            if (AWSIZE == 'd0) begin
+                case (awsize_cnt)
+                    'd0: begin
+                        WEB = WSTRB << 3;
+                        DI  = WDATA << 24;
+                    end
+                    'd1: begin
+                        WEB = WSTRB << 2;
+                        DI  = WDATA << 16;
+                    end
+                    'd2: begin
+                        WEB = WSTRB << 1;
+                        DI  = WDATA << 8;
+                    end
+                    'd3: begin
+                        WEB = WSTRB;
+                        DI  = WDATA;
+                    end
+                endcase
+            end else if (AWSIZE == 'd1) begin
+                case (awsize_cnt) 
+                    'd0: begin
+                        WEB = WSTRB << 2;
+                        DI  = WDATA << 16;
+                    end
+                    'd2: begin
+                        WEB = WSTRB;
+                        DI  = WDATA;
+                    end
+                endcase
+            end else begin
+                WEB = WSTRB;
+                DI  = WDATA;
+            end
+        end else begin
+            WEB = 4'b1111;
+            DI  = 'd0;
+        end
+    end
 
 SRAM  i_SRAM (
     .A0     (A[0]  ),
@@ -230,3 +377,4 @@ SRAM  i_SRAM (
 );
 
 endmodule
+
